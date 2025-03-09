@@ -44,6 +44,7 @@ import { useAuth } from "@/lib/supabase/auth-context";
 import { updateUserProfile, getUserProfile } from "@/lib/supabase/client";
 import { getFavorites } from "@/lib/supabase/client";
 import { Favorite } from "@/lib/supabase/client";
+import { uploadAvatar } from "@/lib/supabase/storage";
 import Link from "next/link";
 
 interface Profile {
@@ -174,7 +175,6 @@ const ProfilePage = () => {
     }
   };
 
-  // Solución temporal para la carga de avatar
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
@@ -183,26 +183,31 @@ const ProfilePage = () => {
     setError(null);
 
     try {
-      // Por ahora, solo actualizamos la URL del avatar con una URL de ejemplo
-      // En una implementación real, subiríamos el archivo a Supabase
-      const newAvatarUrl = "https://bit.ly/dan-abramov"; // URL de ejemplo
-      setAvatarUrl(newAvatarUrl);
+      // Usar la función uploadAvatar del archivo storage.ts
+      const { data, error } = await uploadAvatar(user.id, file);
 
-      // Actualizar el perfil con la nueva URL del avatar
-      await updateUserProfile(user.id, {
-        avatar_url: newAvatarUrl,
-      });
+      if (error) throw error;
 
-      toast({
-        title: "Avatar actualizado",
-        description: "Tu foto de perfil ha sido actualizada correctamente",
-        status: "success",
-        duration: 3000,
-        isClosable: true,
-      });
+      if (data?.path) {
+        const newAvatarUrl = data.path;
+        setAvatarUrl(newAvatarUrl);
+
+        // Actualizar el perfil con la nueva URL del avatar
+        await updateUserProfile(user.id, {
+          avatar_url: newAvatarUrl,
+        });
+
+        toast({
+          title: "Avatar actualizado",
+          description: "Tu foto de perfil ha sido actualizada correctamente",
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+        });
+      }
     } catch (error) {
-      console.error("Error al actualizar el avatar:", error);
-      setError("No se pudo actualizar la imagen. Intenta de nuevo más tarde.");
+      console.error("Error al subir el avatar:", error);
+      setError("No se pudo subir la imagen. Intenta de nuevo más tarde.");
     } finally {
       setUploadingAvatar(false);
     }
