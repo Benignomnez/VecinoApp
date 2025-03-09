@@ -37,11 +37,16 @@ import {
   AlertIcon,
   AlertTitle,
   AlertDescription,
+  Code,
 } from "@chakra-ui/react";
 import { EditIcon, CheckIcon, CloseIcon } from "@chakra-ui/icons";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/supabase/auth-context";
-import { updateUserProfile, getUserProfile } from "@/lib/supabase/client";
+import {
+  updateUserProfile,
+  getUserProfile,
+  createUserProfile,
+} from "@/lib/supabase/client";
 import { getFavorites } from "@/lib/supabase/client";
 import { Favorite } from "@/lib/supabase/client";
 import { uploadAvatar } from "@/lib/supabase/storage";
@@ -71,6 +76,7 @@ const ProfilePage = () => {
   const [loadingFavorites, setLoadingFavorites] = useState(true);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
 
   // Formulario
   const [username, setUsername] = useState("");
@@ -89,21 +95,55 @@ const ProfilePage = () => {
 
       try {
         setError(null);
+        console.log("Fetching profile for user:", user.id);
         const { data, error } = await getUserProfile(user.id);
 
-        if (error) throw error;
+        if (error) {
+          console.error("Error fetching profile:", error);
+          setDebugInfo({ type: "fetch_error", error });
+          throw error;
+        }
 
         if (data) {
+          console.log("Profile data:", data);
           setProfile(data);
           setUsername(data.username || "");
           setFullName(data.full_name || "");
           setAvatarUrl(data.avatar_url || "");
           setBio(data.bio || "");
           setLocation(data.location || "");
+        } else {
+          console.log("No profile data found, creating new profile");
+          setDebugInfo({ type: "no_profile", userId: user.id });
+
+          // Si no existe el perfil, crearlo
+          const { data: newProfile, error: createError } =
+            await createUserProfile(user.id, user.email || "");
+
+          if (createError) {
+            console.error("Error creating profile:", createError);
+            setDebugInfo({ type: "create_error", error: createError });
+            throw createError;
+          }
+
+          if (newProfile) {
+            console.log("New profile created:", newProfile);
+            setProfile(newProfile);
+            setUsername(newProfile.username || "");
+            setFullName(newProfile.full_name || "");
+            setAvatarUrl(newProfile.avatar_url || "");
+            setBio(newProfile.bio || "");
+            setLocation(newProfile.location || "");
+          }
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error al cargar el perfil:", error);
-        setError("No se pudo cargar la información del perfil");
+        setError(
+          `No se pudo cargar la información del perfil: ${
+            error.message || "Error desconocido"
+          }`
+        );
+        setDebugInfo({ type: "catch_error", error });
       } finally {
         setLoading(false);
       }
@@ -167,9 +207,13 @@ const ProfilePage = () => {
       });
 
       setIsEditing(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error al actualizar el perfil:", error);
-      setError("No se pudo actualizar el perfil. Intenta de nuevo más tarde.");
+      setError(
+        `No se pudo actualizar el perfil: ${
+          error.message || "Error desconocido"
+        }`
+      );
     } finally {
       setUpdating(false);
     }
@@ -205,9 +249,11 @@ const ProfilePage = () => {
           isClosable: true,
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error al subir el avatar:", error);
-      setError("No se pudo subir la imagen. Intenta de nuevo más tarde.");
+      setError(
+        `No se pudo subir la imagen: ${error.message || "Error desconocido"}`
+      );
     } finally {
       setUploadingAvatar(false);
     }
@@ -242,6 +288,9 @@ const ProfilePage = () => {
     return (
       <Container maxW="container.md" py={8}>
         <VStack spacing={8} align="stretch">
+          <Heading as="h1" size="xl" textAlign="center" mb={4}>
+            Cargando perfil...
+          </Heading>
           <Skeleton height="100px" />
           <Skeleton height="200px" />
           <Skeleton height="300px" />
@@ -250,7 +299,7 @@ const ProfilePage = () => {
     );
   }
 
-  if (!user || !profile) {
+  if (!user) {
     return (
       <Container maxW="container.md" py={8}>
         <Box textAlign="center">
@@ -266,6 +315,54 @@ const ProfilePage = () => {
     );
   }
 
+  // Si hay un error pero no hay perfil, mostrar un mensaje de error con opción de reintentar
+  if (error && !profile) {
+    return (
+      <Container maxW="container.md" py={8}>
+        <Alert
+          status="error"
+          mb={6}
+          borderRadius="md"
+          flexDirection="column"
+          alignItems="center"
+          justifyContent="center"
+          textAlign="center"
+          p={4}
+        >
+          <AlertIcon boxSize="40px" mr={0} />
+          <AlertTitle mt={4} mb={1} fontSize="lg">
+            Error al cargar el perfil
+          </AlertTitle>
+          <AlertDescription maxWidth="sm">{error}</AlertDescription>
+          <Button
+            mt={4}
+            colorScheme="red"
+            onClick={() => window.location.reload()}
+          >
+            Reintentar
+          </Button>
+        </Alert>
+
+        {debugInfo && (
+          <Box mt={8} p={4} borderWidth="1px" borderRadius="md" bg="gray.50">
+            <Heading size="sm" mb={2}>
+              Información de depuración:
+            </Heading>
+            <Code
+              p={2}
+              borderRadius="md"
+              bg="gray.100"
+              display="block"
+              whiteSpace="pre-wrap"
+            >
+              {JSON.stringify(debugInfo, null, 2)}
+            </Code>
+          </Box>
+        )}
+      </Container>
+    );
+  }
+
   return (
     <Container maxW="container.lg" py={8}>
       {error && (
@@ -274,6 +371,23 @@ const ProfilePage = () => {
           <AlertTitle mr={2}>Error:</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
+      )}
+
+      {debugInfo && (
+        <Box mb={6} p={4} borderWidth="1px" borderRadius="md" bg="gray.50">
+          <Heading size="sm" mb={2}>
+            Información de depuración:
+          </Heading>
+          <Code
+            p={2}
+            borderRadius="md"
+            bg="gray.100"
+            display="block"
+            whiteSpace="pre-wrap"
+          >
+            {JSON.stringify(debugInfo, null, 2)}
+          </Code>
+        </Box>
       )}
 
       <Box
@@ -291,7 +405,7 @@ const ProfilePage = () => {
             <Box position="relative">
               <Avatar
                 size="xl"
-                name={fullName || username}
+                name={fullName || username || user.email || "Usuario"}
                 src={avatarUrl}
                 border="4px solid white"
                 bg="dominican.red"
