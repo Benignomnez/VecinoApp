@@ -13,9 +13,14 @@ import {
   Flex,
   Checkbox,
   SimpleGrid,
+  Alert,
+  AlertIcon,
+  AlertTitle,
+  AlertDescription,
 } from "@chakra-ui/react";
 import { PlacesAutocomplete } from "@/components/search/PlacesAutocomplete";
 import BusinessCard from "@/components/business/BusinessCard";
+import BusinessCardSkeleton from "@/components/business/BusinessCardSkeleton";
 import { searchNearbyPlaces } from "@/lib/google-places/client";
 import GoogleMapsScript from "@/components/maps/GoogleMapsScript";
 
@@ -152,159 +157,135 @@ export default function SearchPage() {
     applyFilters();
   }, [applyFilters]);
 
+  // Renderizar esqueletos durante la carga
+  const renderSkeletons = () => {
+    return Array(6)
+      .fill(0)
+      .map((_, index) => (
+        <GridItem key={`skeleton-${index}`}>
+          <BusinessCardSkeleton />
+        </GridItem>
+      ));
+  };
+
   return (
-    <Container maxW="container.xl" py={8}>
-      <Box textAlign="center" mb={8}>
-        <Heading as="h1" size="xl" mb={4}>
+    <Box py={8}>
+      <GoogleMapsScript />
+      <Container maxW="container.xl">
+        <Heading as="h1" size="xl" mb={6}>
           Buscar lugares en República Dominicana
         </Heading>
-        <Text mb={6}>
-          Busca restaurantes, playas, bares y más en República Dominicana
-        </Text>
 
-        <Box maxW="container.md" mx="auto" mb={8}>
-          <GoogleMapsScript>
-            <PlacesAutocomplete
-              onPlaceSelect={handlePlaceSelect}
-              placeholder="Buscar lugares en República Dominicana..."
-            />
-          </GoogleMapsScript>
+        <Box mb={8}>
+          <PlacesAutocomplete onPlaceSelect={handlePlaceSelect} />
         </Box>
-      </Box>
 
-      {/* Filtros de tipo de lugar */}
-      <Box mb={6}>
-        <Heading as="h3" size="md" mb={3}>
-          Filtrar por tipo de lugar
-        </Heading>
-        <SimpleGrid columns={{ base: 2, md: 3, lg: 5 }} gap={3}>
-          {placeTypes.map((type) => (
-            <Flex
-              key={type.id}
-              p={2}
-              borderWidth="1px"
-              borderRadius="md"
-              borderColor={
-                selectedTypes.includes(type.id) ? "blue.500" : "gray.200"
-              }
-              bg={selectedTypes.includes(type.id) ? "blue.50" : "white"}
-              cursor="pointer"
-              onClick={() => handleTypeSelect(type.id)}
-              align="center"
-            >
+        {/* Filtros por tipo de lugar */}
+        <Box mb={6}>
+          <Text fontSize="lg" fontWeight="bold" mb={3}>
+            Filtrar por tipo de lugar:
+          </Text>
+          <SimpleGrid columns={{ base: 2, md: 3, lg: 5 }} spacing={4}>
+            {placeTypes.map((type) => (
               <Checkbox
+                key={type.id}
                 isChecked={selectedTypes.includes(type.id)}
                 onChange={() => handleTypeSelect(type.id)}
-                mr={2}
+                colorScheme="blue"
               >
-                {type.label}
+                <Flex align="center">
+                  <Text mr={2}>{type.icon}</Text>
+                  <Text>{type.label}</Text>
+                </Flex>
               </Checkbox>
-            </Flex>
-          ))}
-        </SimpleGrid>
-        {selectedTypes.length > 0 && (
-          <Button
-            mt={3}
-            size="sm"
-            variant="outline"
-            onClick={() => setSelectedTypes([])}
-          >
-            Limpiar filtros
-          </Button>
-        )}
-      </Box>
-
-      {loading && (
-        <Box textAlign="center" py={8}>
-          <Text>Cargando resultados...</Text>
-        </Box>
-      )}
-
-      {error && (
-        <Box p={4} borderRadius="md" bg="red.50" color="red.500" mb={8}>
-          {error}
-        </Box>
-      )}
-
-      {!loading && !error && filteredResults.length > 0 && (
-        <>
-          <Flex justify="space-between" align="center" mb={4}>
-            <Heading as="h2" size="lg">
-              Resultados de búsqueda
-            </Heading>
-            <Text color="gray.500">
-              {filteredResults.length}{" "}
-              {filteredResults.length === 1
-                ? "lugar encontrado"
-                : "lugares encontrados"}
-            </Text>
-          </Flex>
-
-          <Grid
-            templateColumns={{
-              base: "repeat(1, 1fr)",
-              md: "repeat(2, 1fr)",
-              lg: "repeat(3, 1fr)",
-            }}
-            gap={6}
-            mb={8}
-          >
-            {filteredResults.map((place) => (
-              <GridItem key={place.id}>
-                <BusinessCard
-                  id={place.id}
-                  name={place.name}
-                  image={place.image}
-                  rating={place.rating}
-                  reviewCount={place.reviewCount}
-                  location={place.location}
-                  category={place.category}
-                />
-              </GridItem>
             ))}
-          </Grid>
+          </SimpleGrid>
+        </Box>
 
-          {filteredResults.length > 0 &&
-            searchResults.length > filteredResults.length && (
-              <Box textAlign="center" mb={8}>
-                <Text mb={2}>
-                  Mostrando {filteredResults.length} de {searchResults.length}{" "}
-                  resultados
-                </Text>
-                <Button
-                  variant="outline"
-                  colorScheme="blue"
-                  onClick={() => setSelectedTypes([])}
-                >
-                  Mostrar todos los resultados
-                </Button>
-              </Box>
-            )}
-        </>
-      )}
+        {/* Mostrar error si existe */}
+        {error && (
+          <Alert status="error" mb={6} borderRadius="md">
+            <AlertIcon />
+            <AlertTitle mr={2}>Error:</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
-      {!loading &&
-        !error &&
-        searchResults.length > 0 &&
-        filteredResults.length === 0 && (
-          <Box textAlign="center" py={8}>
-            <Text mb={4}>
-              No se encontraron resultados con los filtros seleccionados.
+        {/* Resultados de búsqueda */}
+        {selectedPlace && (
+          <Box mb={4}>
+            <Text fontSize="lg" fontWeight="medium">
+              Resultados cerca de{" "}
+              <Text as="span" color="blue.600">
+                {selectedPlace.name}
+              </Text>
+              :
             </Text>
-            <Button colorScheme="blue" onClick={() => setSelectedTypes([])}>
-              Mostrar todos los resultados
-            </Button>
           </Box>
         )}
 
-      {!loading && !error && searchResults.length === 0 && selectedPlace && (
-        <Box textAlign="center" py={8}>
-          <Text>
-            No se encontraron resultados para {selectedPlace.name}. Intenta con
-            otra búsqueda.
-          </Text>
-        </Box>
-      )}
-    </Container>
+        <Grid
+          templateColumns={{
+            base: "repeat(1, 1fr)",
+            md: "repeat(2, 1fr)",
+            lg: "repeat(3, 1fr)",
+          }}
+          gap={6}
+        >
+          {loading
+            ? renderSkeletons()
+            : filteredResults.map((place) => (
+                <GridItem key={place.id}>
+                  <BusinessCard
+                    id={place.id}
+                    name={place.name}
+                    image={place.image}
+                    rating={place.rating}
+                    reviewCount={place.reviewCount}
+                    location={place.location}
+                    category={place.category}
+                  />
+                </GridItem>
+              ))}
+        </Grid>
+
+        {/* Mensaje cuando no hay resultados */}
+        {!loading &&
+          filteredResults.length === 0 &&
+          searchResults.length > 0 && (
+            <Box textAlign="center" py={10}>
+              <Text fontSize="lg" color="gray.600">
+                No hay resultados que coincidan con los filtros seleccionados.
+              </Text>
+              <Button
+                mt={4}
+                colorScheme="blue"
+                onClick={() => setSelectedTypes([])}
+              >
+                Limpiar filtros
+              </Button>
+            </Box>
+          )}
+
+        {/* Mensaje cuando no se ha realizado ninguna búsqueda */}
+        {!loading && searchResults.length === 0 && !selectedPlace && (
+          <Box
+            textAlign="center"
+            py={10}
+            borderWidth="1px"
+            borderRadius="lg"
+            borderStyle="dashed"
+            borderColor="gray.300"
+          >
+            <Text fontSize="lg" color="gray.600" mb={2}>
+              Busca un lugar o selecciona una ubicación para ver resultados
+            </Text>
+            <Text fontSize="sm" color="gray.500">
+              Puedes buscar por nombre, dirección o ciudad
+            </Text>
+          </Box>
+        )}
+      </Container>
+    </Box>
   );
 }

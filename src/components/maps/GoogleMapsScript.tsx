@@ -7,7 +7,7 @@ import { useLoadScript } from "@react-google-maps/api";
 const libraries: ["places"] = ["places"];
 
 interface GoogleMapsScriptProps {
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 const GoogleMapsScript = ({ children }: GoogleMapsScriptProps) => {
@@ -40,6 +40,11 @@ const GoogleMapsScript = ({ children }: GoogleMapsScriptProps) => {
   // Mostrar un mensaje de carga mientras se carga el script
   if (!isLoaded || !isClient) {
     return <div>Cargando Google Maps...</div>;
+  }
+
+  // Si no hay children, simplemente retornar null
+  if (!children) {
+    return null;
   }
 
   // Renderizar los componentes hijos una vez que el script está cargado

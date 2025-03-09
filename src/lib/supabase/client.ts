@@ -273,3 +273,42 @@ export const isFavorite = async (userId: string, placeId: string) => {
 
   return { isFavorite: !!data, error };
 };
+
+// Función para subir un avatar
+export const uploadAvatar = async (userId: string, file: File) => {
+  try {
+    // Generar un nombre único para el archivo
+    const fileExt = file.name.split(".").pop();
+    const fileName = `${userId}-${Math.random()
+      .toString(36)
+      .substring(2)}.${fileExt}`;
+    const filePath = `avatars/${fileName}`;
+
+    // Subir el archivo al bucket de storage
+    const { error: uploadError } = await supabase.storage
+      .from("profiles")
+      .upload(filePath, file);
+
+    if (uploadError) {
+      throw uploadError;
+    }
+
+    // Obtener la URL pública del archivo
+    const { data } = supabase.storage.from("profiles").getPublicUrl(filePath);
+
+    // Actualizar el perfil del usuario con la nueva URL
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({ avatar_url: data.publicUrl })
+      .eq("id", userId);
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    return { data: { path: data.publicUrl }, error: null };
+  } catch (error) {
+    console.error("Error al subir el avatar:", error);
+    return { data: null, error };
+  }
+};
