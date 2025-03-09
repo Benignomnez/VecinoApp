@@ -10,10 +10,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 // Tipos para las tablas de Supabase
 export interface UserProfile {
   id: string;
-  username?: string;
   full_name?: string;
   avatar_url?: string;
-  email?: string;
   bio?: string;
   location?: string;
   created_at?: string;
@@ -21,7 +19,6 @@ export interface UserProfile {
 }
 
 export interface ProfileUpdateData {
-  username?: string;
   full_name?: string;
   avatar_url?: string;
   bio?: string;
@@ -53,22 +50,45 @@ export const signUp = async (
   password: string,
   fullName: string
 ) => {
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: {
-        full_name: fullName,
+  try {
+    console.log("Signing up user with email:", email);
+
+    // Registrar al usuario
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: fullName,
+        },
       },
-    },
-  });
+    });
 
-  if (data.user && !error) {
-    // Crear perfil de usuario en la tabla profiles
-    await createUserProfile(data.user.id, fullName);
+    if (error) {
+      console.error("Error signing up:", error);
+      return { data, error };
+    }
+
+    if (data.user) {
+      console.log("User signed up successfully, creating profile");
+
+      // Crear perfil de usuario en la tabla profiles
+      const { error: profileError } = await createUserProfile(
+        data.user.id,
+        email
+      );
+
+      if (profileError) {
+        console.error("Error creating profile during signup:", profileError);
+        // No devolvemos este error para no interrumpir el flujo de registro
+      }
+    }
+
+    return { data, error: null };
+  } catch (error) {
+    console.error("Exception in signUp:", error);
+    return { data: { user: null, session: null }, error };
   }
-
-  return { data, error };
 };
 
 export const signIn = async (email: string, password: string) => {
@@ -101,60 +121,100 @@ export const getCurrentUser = async () => {
 };
 
 // Funciones para perfiles de usuario
-export const createUserProfile = async (userId: string, fullName: string) => {
-  // Primero verificamos si ya existe un perfil para este usuario
-  const { data: existingProfile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", userId)
-    .maybeSingle();
+export const createUserProfile = async (userId: string, email: string = "") => {
+  try {
+    console.log("Creating profile for user:", userId, "with email:", email);
 
-  // Si ya existe un perfil, lo devolvemos
-  if (existingProfile) {
-    return { data: existingProfile, error: null };
-  }
+    // Generar un nombre predeterminado basado en el email o el ID del usuario
+    const defaultName = email
+      ? email.split("@")[0]
+      : `Usuario_${userId.substring(0, 6)}`;
 
-  // Si no existe, creamos uno nuevo
-  const { data, error } = await supabase
-    .from("profiles")
-    .insert([
-      {
+    // Insertar el nuevo perfil - asegurándose de que full_name siempre tenga un valor
+    const { data, error } = await supabase
+      .from("profiles")
+      .insert({
         id: userId,
-        full_name: fullName,
-        username: `user_${userId.substring(0, 8)}`,
-        email: fullName, // Usamos fullName como email temporalmente si es un email
+        full_name: defaultName, // Siempre proporcionamos un valor para full_name
         created_at: new Date().toISOString(),
-      },
-    ])
-    .select()
-    .maybeSingle();
+        updated_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
 
-  return { data, error };
+    if (error) {
+      console.error("Error creating profile:", error);
+      throw error;
+    }
+
+    console.log("Profile created successfully:", data);
+    return { data, error: null };
+  } catch (error) {
+    console.error("Exception in createUserProfile:", error);
+    return { data: null, error };
+  }
 };
 
 export const getUserProfile = async (userId: string) => {
   try {
-    // Intentamos obtener el perfil
-    const { data, error } = await supabase
+    console.log("Getting profile for user:", userId);
+
+    // Intentar obtener el perfil existente
+    let { data, error } = await supabase
       .from("profiles")
       .select("*")
       .eq("id", userId)
       .maybeSingle();
 
-    // Si hay un error específico de "no rows returned", creamos un perfil
-    if (error && error.code === "PGRST116") {
-      console.log("No profile found, creating a new one");
-      // Obtenemos el email del usuario
-      const { data: userData } = await supabase.auth.getUser(userId);
-      const email = userData?.user?.email || "";
+    // Si no hay datos pero tampoco hay error, significa que no existe el perfil
+    if (!data && !error) {
+      console.log("No profile found, will create one");
 
-      // Creamos un nuevo perfil
-      return await createUserProfile(userId, email);
+      // Obtener información del usuario
+      const { data: authData } = await supabase.auth.getUser();
+      const email = authData?.user?.email || "";
+
+      // Intentar crear un nuevo perfil
+      const createResult = await createUserProfile(userId, email);
+
+      if (createResult.error) {
+        console.error("Error creating profile:", createResult.error);
+        return createResult;
+      }
+
+      data = createResult.data;
+      console.log("New profile created and returned:", data);
+    } else if (error) {
+      console.error("Error fetching profile:", error);
+
+      // Si el error es específicamente que no se encontró el perfil
+      if (error.code === "PGRST116") {
+        console.log("PGRST116 error, will create profile");
+
+        // Obtener información del usuario
+        const { data: authData } = await supabase.auth.getUser();
+        const email = authData?.user?.email || "";
+
+        // Intentar crear un nuevo perfil
+        const createResult = await createUserProfile(userId, email);
+
+        if (createResult.error) {
+          console.error(
+            "Error creating profile after PGRST116:",
+            createResult.error
+          );
+          return createResult;
+        }
+
+        data = createResult.data;
+        error = null;
+        console.log("New profile created after PGRST116:", data);
+      }
     }
 
     return { data, error };
   } catch (error) {
-    console.error("Error in getUserProfile:", error);
+    console.error("Exception in getUserProfile:", error);
     return { data: null, error };
   }
 };
@@ -163,13 +223,30 @@ export const updateUserProfile = async (
   userId: string,
   profileData: ProfileUpdateData
 ) => {
-  const { data, error } = await supabase
-    .from("profiles")
-    .update(profileData)
-    .eq("id", userId)
-    .select();
+  try {
+    // Asegurarse de que full_name nunca sea null o vacío
+    if (profileData.full_name === null || profileData.full_name === "") {
+      return {
+        data: null,
+        error: new Error("El nombre completo no puede estar vacío"),
+      };
+    }
 
-  return { data, error };
+    const { data, error } = await supabase
+      .from("profiles")
+      .update(profileData)
+      .eq("id", userId)
+      .select();
+
+    if (error) {
+      console.error("Error updating profile:", error);
+    }
+
+    return { data, error };
+  } catch (error) {
+    console.error("Exception in updateUserProfile:", error);
+    return { data: null, error };
+  }
 };
 
 // Funciones para reseñas

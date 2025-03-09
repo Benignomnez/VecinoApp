@@ -54,10 +54,8 @@ import Link from "next/link";
 
 interface Profile {
   id: string;
-  username: string;
   full_name: string;
   avatar_url: string;
-  email: string;
   bio?: string;
   location?: string;
 }
@@ -79,7 +77,6 @@ const ProfilePage = () => {
   const [debugInfo, setDebugInfo] = useState<any>(null);
 
   // Formulario
-  const [username, setUsername] = useState("");
   const [fullName, setFullName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
   const [bio, setBio] = useState("");
@@ -96,18 +93,24 @@ const ProfilePage = () => {
       try {
         setError(null);
         console.log("Fetching profile for user:", user.id);
+
+        // Intentar obtener el perfil del usuario
         const { data, error } = await getUserProfile(user.id);
 
         if (error) {
           console.error("Error fetching profile:", error);
-          setDebugInfo({ type: "fetch_error", error });
+          setDebugInfo({
+            type: "fetch_error",
+            error,
+            userId: user.id,
+            userEmail: user.email,
+          });
           throw error;
         }
 
         if (data) {
-          console.log("Profile data:", data);
+          console.log("Profile data received:", data);
           setProfile(data);
-          setUsername(data.username || "");
           setFullName(data.full_name || "");
           setAvatarUrl(data.avatar_url || "");
           setBio(data.bio || "");
@@ -115,8 +118,38 @@ const ProfilePage = () => {
         } else {
           // Si no hay datos pero tampoco hay error, es un caso extraño
           console.log("No profile data found but no error");
-          setDebugInfo({ type: "no_profile_no_error", userId: user.id });
-          setError("No se pudo cargar el perfil. Por favor, intenta de nuevo.");
+          setDebugInfo({
+            type: "no_profile_no_error",
+            userId: user.id,
+            userEmail: user.email,
+          });
+
+          // Intentar crear un perfil manualmente
+          console.log("Attempting to create profile manually");
+          const { data: newProfile, error: createError } =
+            await createUserProfile(user.id, user.email || "");
+
+          if (createError) {
+            console.error("Error creating profile manually:", createError);
+            setDebugInfo({
+              type: "manual_create_error",
+              error: createError,
+              userId: user.id,
+              userEmail: user.email,
+            });
+            throw createError;
+          }
+
+          if (newProfile) {
+            console.log("Profile created manually:", newProfile);
+            setProfile(newProfile);
+            setFullName(newProfile.full_name || "");
+            setAvatarUrl(newProfile.avatar_url || "");
+            setBio(newProfile.bio || "");
+            setLocation(newProfile.location || "");
+          } else {
+            throw new Error("No se pudo crear el perfil manualmente");
+          }
         }
       } catch (error: any) {
         console.error("Error al cargar el perfil:", error);
@@ -125,7 +158,12 @@ const ProfilePage = () => {
             error.message || "Error desconocido"
           }`
         );
-        setDebugInfo({ type: "catch_error", error });
+        setDebugInfo({
+          type: "catch_error",
+          error,
+          userId: user?.id,
+          userEmail: user?.email,
+        });
       } finally {
         setLoading(false);
       }
@@ -161,7 +199,6 @@ const ProfilePage = () => {
 
     try {
       const { error } = await updateUserProfile(user.id, {
-        username,
         full_name: fullName,
         avatar_url: avatarUrl,
         bio,
@@ -173,7 +210,6 @@ const ProfilePage = () => {
       // Actualizar el perfil en el estado
       setProfile({
         ...profile!,
-        username,
         full_name: fullName,
         avatar_url: avatarUrl,
         bio,
@@ -257,7 +293,6 @@ const ProfilePage = () => {
   const cancelEditing = () => {
     // Restaurar los valores originales
     if (profile) {
-      setUsername(profile.username || "");
       setFullName(profile.full_name || "");
       setAvatarUrl(profile.avatar_url || "");
       setBio(profile.bio || "");
@@ -387,7 +422,7 @@ const ProfilePage = () => {
             <Box position="relative">
               <Avatar
                 size="xl"
-                name={fullName || username || user.email || "Usuario"}
+                name={fullName || "Usuario"}
                 src={avatarUrl}
                 border="4px solid white"
                 bg="dominican.red"
@@ -464,15 +499,6 @@ const ProfilePage = () => {
                 </FormControl>
 
                 <FormControl>
-                  <FormLabel>Nombre de usuario</FormLabel>
-                  <Input
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="Tu nombre de usuario"
-                  />
-                </FormControl>
-
-                <FormControl>
                   <FormLabel>Biografía</FormLabel>
                   <Input
                     value={bio}
@@ -495,9 +521,6 @@ const ProfilePage = () => {
                 <Heading as="h1" size="xl" mb={2}>
                   {fullName || "Sin nombre"}
                 </Heading>
-                <Text color="gray.600" mb={2}>
-                  @{username || "usuario"}
-                </Text>
 
                 {bio && <Text mb={4}>{bio}</Text>}
 
