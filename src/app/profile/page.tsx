@@ -113,28 +113,10 @@ const ProfilePage = () => {
           setBio(data.bio || "");
           setLocation(data.location || "");
         } else {
-          console.log("No profile data found, creating new profile");
-          setDebugInfo({ type: "no_profile", userId: user.id });
-
-          // Si no existe el perfil, crearlo
-          const { data: newProfile, error: createError } =
-            await createUserProfile(user.id, user.email || "");
-
-          if (createError) {
-            console.error("Error creating profile:", createError);
-            setDebugInfo({ type: "create_error", error: createError });
-            throw createError;
-          }
-
-          if (newProfile) {
-            console.log("New profile created:", newProfile);
-            setProfile(newProfile);
-            setUsername(newProfile.username || "");
-            setFullName(newProfile.full_name || "");
-            setAvatarUrl(newProfile.avatar_url || "");
-            setBio(newProfile.bio || "");
-            setLocation(newProfile.location || "");
-          }
+          // Si no hay datos pero tampoco hay error, es un caso extraño
+          console.log("No profile data found but no error");
+          setDebugInfo({ type: "no_profile_no_error", userId: user.id });
+          setError("No se pudo cargar el perfil. Por favor, intenta de nuevo.");
         }
       } catch (error: any) {
         console.error("Error al cargar el perfil:", error);

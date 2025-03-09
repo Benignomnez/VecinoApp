@@ -102,28 +102,61 @@ export const getCurrentUser = async () => {
 
 // Funciones para perfiles de usuario
 export const createUserProfile = async (userId: string, fullName: string) => {
+  // Primero verificamos si ya existe un perfil para este usuario
+  const { data: existingProfile } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", userId)
+    .maybeSingle();
+
+  // Si ya existe un perfil, lo devolvemos
+  if (existingProfile) {
+    return { data: existingProfile, error: null };
+  }
+
+  // Si no existe, creamos uno nuevo
   const { data, error } = await supabase
     .from("profiles")
     .insert([
       {
         id: userId,
         full_name: fullName,
+        username: `user_${userId.substring(0, 8)}`,
+        email: fullName, // Usamos fullName como email temporalmente si es un email
         created_at: new Date().toISOString(),
       },
     ])
-    .select();
+    .select()
+    .maybeSingle();
 
   return { data, error };
 };
 
 export const getUserProfile = async (userId: string) => {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", userId)
-    .single();
+  try {
+    // Intentamos obtener el perfil
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
+      .maybeSingle();
 
-  return { data, error };
+    // Si hay un error específico de "no rows returned", creamos un perfil
+    if (error && error.code === "PGRST116") {
+      console.log("No profile found, creating a new one");
+      // Obtenemos el email del usuario
+      const { data: userData } = await supabase.auth.getUser(userId);
+      const email = userData?.user?.email || "";
+
+      // Creamos un nuevo perfil
+      return await createUserProfile(userId, email);
+    }
+
+    return { data, error };
+  } catch (error) {
+    console.error("Error in getUserProfile:", error);
+    return { data: null, error };
+  }
 };
 
 export const updateUserProfile = async (
